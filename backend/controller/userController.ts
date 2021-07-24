@@ -5,8 +5,8 @@ import filterObject from "../utils/filterObject";
 import fs from "fs";
 import crypto from "crypto";
 import { promisify } from "util";
-import { NextFunction, Request, Response } from "express";
-import { redisDel } from "../utils/redis";
+import { NextFunction, Request, Response, RequestHandler } from "express";
+// import client from "../utils/redis";
 
 const unlinkAsync = promisify(fs.unlink);
 
@@ -15,7 +15,7 @@ export const destroyMe = catchAsync(
     await User.findByIdAndUpdate(req.user._id, {
       deletedAt: new Date(Date.now()),
     });
-    await redisDel(req.user._id.toString());
+    // await client.del(req.user._id.toString());
     res
       .status(200)
       .clearCookie("jwtAccessToken")
@@ -34,7 +34,7 @@ export const forgotPassword = catchAsync(
 
     const resetToken = user.createPasswordResetToken();
 
-    await user.save({ validateBeforeSave: false });
+    await user.save({ validateModifiedOnly: true });
     console.log(resetToken);
     res.status(200).json({ status: "success", data: { token: resetToken } });
   }
@@ -45,15 +45,21 @@ export const resetPassword = catchAsync(
     const { password, passwordConfirmation } = req.body;
     const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
     const user = await User.findOne({ passwordResetToken: hashedToken });
-    console.log(user);
-    if (!user || user.passwordResetTokenExpiresAt < new Date(Date.now())) {
+    if (
+      !user ||
+      (user.passwordResetTokenExpiresAt &&
+        user.passwordResetTokenExpiresAt < new Date(Date.now()))
+    ) {
       return next(new AppError("Token is invalid or has expired", 400));
     }
+    console.log(passwordConfirmation, password);
     user.password = password;
     user.passwordConfirmation = passwordConfirmation;
+    user.passwordChangedAt = new Date(Date.now());
     user.passwordResetToken = undefined;
     user.passwordResetTokenExpiresAt = undefined;
-    await user.save();
+    const data = await user.save({ validateModifiedOnly: true });
+    console.log(data);
     res.status(200).json({ status: "success" });
   }
 );
@@ -68,16 +74,15 @@ export const updateMe = catchAsync(
 
     if (req.file) {
       const user = await User.findById(req.user._id).select("avatar");
-      if (user.avatar) {
+      if (user?.avatar) {
         try {
           await unlinkAsync(`public/images/avatars/${user.avatar}`);
-        } catch (err) {
+        } catch (err: any) {
           if (err.code !== "ENOENT") return next(err);
         }
+        filtered.avatar = req.file.filename;
       }
-      filtered.avatar = req.file.filename;
     }
-
     const updatedUser = await User.findByIdAndUpdate(req.user._id, filtered, {
       new: true,
       runValidators: true,

@@ -1,13 +1,7 @@
-import redis from "redis";
+// import { createNodeRedisClient } from "handy-redis";
 
-import { promisify } from "util";
-
-const client = redis.createClient();
-
-client.on("ready", () => console.log("connected to redis"));
-client.on("error", (err: object) => console.log(err));
-client.on("SIGINT", () => client.quit());
-
-export const redisGet: any = promisify(client.get).bind(client);
-export const redisSet: any = promisify(client.set).bind(client);
-export const redisDel: any = promisify(client.del).bind(client);
+// const client = createNodeRedisClient({});
+// client.nodeRedis.on("ready", () => console.log("connected to redis"));
+// client.nodeRedis.on("error", (err: Error) => console.log(err));
+// client.nodeRedis.on("SIGINT", () => client.quit());
+// export default client;

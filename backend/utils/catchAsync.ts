@@ -1,3 +1,6 @@
-export default (fn) => {
-  return (req, res, next) => fn(req, res, next).catch(next);
+import { Request, Response, NextFunction, RequestHandler } from "express";
+
+export default (fn: Function) => {
+  return (req: any, res: any, next: any): void =>
+    fn(req, res, next).catch(next);
 };

@@ -5,11 +5,12 @@ import cookieParser from "cookie-parser";
 import rateLimit from "express-rate-limit";
 import express, { Request, Response, NextFunction, Application } from "express";
 import mongoSanitize from "express-mongo-sanitize";
-import xss from "xss-clean";
+// import xss from "xss-clean";
 import hpp from "hpp";
 import AppError from "./utils/appError";
 import globalErrorHandler from "./controller/errorController";
 import indexRoutes from "./routes/indexRoutes";
+import { IUser } from "./model/userModel";
 
 const app: Application = express();
 
@@ -28,7 +29,15 @@ app.use(express.json());
 
 app.use(hpp());
 app.use(mongoSanitize());
-app.use(xss());
+// app.use(xss());
+
+declare global {
+  namespace Express {
+    interface Request {
+      user: IUser;
+    }
+  }
+}
 app.use("/public", express.static("./public"));
 
 app.get("/", (req: Request, res: Response) => {

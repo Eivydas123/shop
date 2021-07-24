@@ -1,9 +1,9 @@
-import multer from "multer";
+import multer, { FileFilterCallback } from "multer";
 import { v4 } from "uuid";
 import AppError from "../appError";
 import sharp from "sharp";
 import catchAsync from "../catchAsync";
-import { NextFunction, Request, Response } from "express";
+import { NextFunction, Request, RequestHandler, Response } from "express";
 
 // const multerStorage = multer.diskStorage({
 //   destination: (req, file, cb) => {
@@ -15,11 +15,11 @@ import { NextFunction, Request, Response } from "express";
 //   },
 // });
 const multerStorage = multer.memoryStorage();
-const multerFilter = (req: Request, file: any, cb) => {
+const multerFilter = (req: Request, file: any, cb: FileFilterCallback) => {
   if (file.mimetype.startsWith("image")) {
     cb(null, true);
   } else {
-    cb(new AppError("This route only supports images", 400), false);
+    cb(new AppError("This route only supports images", 400));
   }
 };
 export const userAvatar = multer({
@@ -27,14 +27,16 @@ export const userAvatar = multer({
   fileFilter: multerFilter,
   limits: { fileSize: 15 * 1000 * 1000, files: 1 },
 });
-export const resize = catchAsync(async (req, res, next) => {
-  if (!req.file) return next();
+export const resize = catchAsync(
+  async (req: Request, res: Response, next: NextFunction) => {
+    if (!req.file) return next();
 
-  req.file.filename = `avatar-${v4()}.jpeg`;
-  await sharp(req.file.buffer)
-    .resize(500, 500)
-    .toFormat("jpeg")
-    .jpeg()
-    .toFile(`public/images/avatars/${req.file.filename}`);
-  next();
-});
+    req.file.filename = `avatar-${v4()}.jpeg`;
+    await sharp(req.file.buffer)
+      .resize(500, 500)
+      .toFormat("jpeg")
+      .jpeg()
+      .toFile(`public/images/avatars/${req.file.filename}`);
+    next();
+  }
+);

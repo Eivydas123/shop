@@ -1,12 +1,14 @@
 import mongoose, { Document } from "mongoose";
+import { IUser } from "./userModel";
 const objectID = mongoose.Schema.Types.ObjectId;
-interface roleDocument extends Document {
+
+interface IRole extends Document {
+  role: string;
+  createdBy: IUser;
   createdAt: Date;
   updatedAt: Date;
-  role: string;
-  createdBy: any;
 }
-const roleShema = new mongoose.Schema(
+const roleSchema = new mongoose.Schema(
   {
     role: {
       type: String,
@@ -16,9 +18,13 @@ const roleShema = new mongoose.Schema(
       trim: true,
       validate: [
         {
-          validator: async function (role) {
-            if (this.isModified("role" || this.isNew)) {
-              const doc = await this.constructor.findOne({ role });
+          validator: async function (role: string) {
+            const roleModel = this as unknown as IRole;
+            if (roleModel.isModified("role" || roleModel.isNew)) {
+              //@ts-ignore
+              const doc: IRole = await roleModel.constructor.findOne({
+                role: role,
+              });
 
               if (doc) {
                 return false;
@@ -36,4 +42,4 @@ const roleShema = new mongoose.Schema(
   { timestamps: true }
 );
 
-export default mongoose.model<roleDocument>("Role", roleShema);
+export default mongoose.model<IRole>("Role", roleSchema);

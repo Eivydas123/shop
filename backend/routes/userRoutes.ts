@@ -43,7 +43,7 @@ Router.post(
 );
 Router.post("/login", loginRateLimit, login);
 Router.post("/logout", logout);
-Router.post("/authorize-device", authorizeDevice);
+Router.post("/authorize-device/:userId", authorizeDevice);
 Router.patch("/update-password", auth, updatePassword);
 Router.patch("/update-me", auth, userAvatar.single("avatar"), resize, updateMe);
 Router.post("/forgot-password", forgotPassword);

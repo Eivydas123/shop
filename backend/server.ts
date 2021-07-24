@@ -1,7 +1,7 @@
 import env from "dotenv";
 env.config();
 import mongoose from "mongoose";
-import "./utils/redis";
+// import "./utils/redis";
 process.on("uncaughtException", (error) => {
   console.log(error, error.message);
   console.log("Uncaught exception! shutting down...");
@@ -15,7 +15,7 @@ const server = app.listen(process.env.PORT, () => {
 });
 
 mongoose
-  .connect(process.env.DB_CONNECTION, {
+  .connect(process.env.DB_CONNECTION!, {
     useUnifiedTopology: true,
     useCreateIndex: true,
     useNewUrlParser: true,

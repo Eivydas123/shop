@@ -4,8 +4,11 @@ import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import ip from "ip";
 import os from "os";
+export interface IAuthorizeDevice {
+  code: Number;
+  tokenExpiresAt: string;
+}
 export interface IAuthorizedDevices {
-  _id: string;
   hostName: string;
   platform: string;
   ip: string;
@@ -18,27 +21,42 @@ export interface IUser extends Document {
   updatedAt: Date;
   role: string;
   password: string;
-  passwordConfirmation: string;
+  passwordConfirmation: string | undefined;
   avatar: string;
-  deletedAt: Date;
-  passwordResetToken: string;
-  code: number;
-  codeExpiresAt: Date;
-  passwordResetTokenExpiresAt: Date;
+  deletedAt: Date | undefined;
+  passwordResetToken: string | undefined;
+  code: number | undefined;
+  codeExpiresAt: Date | undefined;
+  authorizeDevice: IAuthorizeDevice;
+  passwordResetTokenExpiresAt: Date | undefined;
+  passwordChangedAt: Date;
   authorizedDevices: IAuthorizedDevices[];
   createPasswordResetToken(): string;
   compareOS: () => boolean;
+
+  changedPasswordAfter: (JWTTimestamp: number) => boolean;
   comparePasswords: (
     candidatePassword: string,
     userPassword: string
   ) => Promise<boolean>;
 }
 
-const authorizedDevicesSchema = new mongoose.Schema({
-  hostName: { type: String, required: true },
-  platform: { type: String, required: true },
-  ip: { type: String, required: true },
-});
+const authorizedDevicesSchema = new mongoose.Schema(
+  {
+    hostName: { type: String, required: true },
+    platform: { type: String, required: true },
+    ip: { type: String, required: true },
+  },
+  { _id: false }
+);
+const authorizeDeviceSchema = new mongoose.Schema(
+  {
+    code: { type: Number, required: true },
+    token: { type: String, required: true },
+    tokenExpiresAt: { type: Date, required: true },
+  },
+  { _id: false }
+);
 const userSchema = new mongoose.Schema(
   {
     name: {
@@ -54,9 +72,13 @@ const userSchema = new mongoose.Schema(
       lowercase: true,
       validate: [
         {
-          validator: async function (email) {
-            if (this.isModified("email" || this.isNew)) {
-              const doc = await this.constructor.findOne({ email });
+          validator: async function (email: string) {
+            const user = this as unknown as IUser;
+            if (user.isModified("email" || user.isNew)) {
+              //@ts-ignore
+              const doc: IUser = await user.constructor.findOne({
+                email,
+              });
 
               if (doc) {
                 return false;
@@ -74,7 +96,7 @@ const userSchema = new mongoose.Schema(
     },
     password: {
       type: String,
-      required: [true, "{PATH} is required"],
+      required: true,
       select: false,
       validate: [
         {
@@ -87,11 +109,12 @@ const userSchema = new mongoose.Schema(
     },
     passwordConfirmation: {
       type: String,
-      required: [true, "{PATH} is required"],
+      required: true,
       validate: {
-        validator: function (passwordConfirmation) {
-          console.log("running");
-          return passwordConfirmation === this.password;
+        validator: function (passwordConfirmation: string) {
+          const user = this as unknown as IUser;
+          console.log("running", "is" + passwordConfirmation, user.password);
+          return passwordConfirmation === user.password;
         },
         message: (props) => `passwords must match`,
       },
@@ -105,20 +128,22 @@ const userSchema = new mongoose.Schema(
     },
     code: { type: Number, min: 1000, max: 9999 },
     codeExpiresAt: Date,
+    authorizeDevice: authorizeDeviceSchema,
     authorizedDevices: [authorizedDevicesSchema],
     avatar: String,
     deletedAt: Date,
     passwordResetToken: { type: String, index: true },
     passwordResetTokenExpiresAt: Date,
+    passwordChangedAt: Date,
   },
   { timestamps: true }
 );
 
 userSchema.pre<IUser>("save", async function (next) {
-  if (!this.isModified("password")) return next();
-  console.log("running");
-  this.password = await bcrypt.hash(this.password, 12);
-  this.passwordConfirmation = undefined;
+  const user = this as IUser;
+  if (!user.isModified("password")) return next();
+  user.password = await bcrypt.hash(this.password, 12);
+  user.passwordConfirmation = undefined;
 
   next();
 });
@@ -134,30 +159,46 @@ userSchema.methods.comparePasswords = async function (
 ) {
   return await bcrypt.compare(candidatePassword, userPassword);
 };
-userSchema.methods.compareOS = async function (this: IUser) {
-  const findDevice = this.authorizedDevices.find(
+userSchema.methods.compareOS = function () {
+  const user = this as IUser;
+  const findDevice = user.authorizedDevices.find(
     (item) =>
       item.ip === ip.address() &&
       item.platform === os.platform() &&
       item.hostName === os.hostname()
   );
-  if (findDevice) {
-    const code: number = Math.floor(1000 + Math.random() * 9000);
-    this.code = code;
-    this.codeExpiresAt = new Date(Date.now() + 2 * 60 * 1000);
-    return false;
-  }
-  return true;
+  if (findDevice) return true;
+
+  const code: number = Math.floor(1000 + Math.random() * 9000);
+  user.code = code;
+  user.codeExpiresAt = new Date(Date.now() + 2 * 60 * 1000);
+  return false;
 };
-userSchema.methods.createPasswordResetToken = function (this: IUser) {
+const createToken = () => {
   const token: string = crypto.randomBytes(64).toString("hex");
   const hashedToken: string = crypto
     .createHash("sha256")
     .update(token)
     .digest("hex");
-  this.passwordResetToken = hashedToken;
-  this.passwordResetTokenExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
+  return { token, hashedToken };
+};
+userSchema.methods.createPasswordResetToken = function () {
+  const user = this as IUser;
+  const { token, hashedToken } = createToken();
+  user.passwordResetToken = hashedToken;
+  user.passwordResetTokenExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
   return token;
+};
+userSchema.methods.changedPasswordAfter = function (
+  JWTTimestamp: number
+): boolean {
+  const user = this as IUser;
+  if (!user.passwordChangedAt) return false;
+  console.log(
+    JWTTimestamp,
+    Math.floor(user.passwordChangedAt.getTime() / 1000)
+  );
+  return JWTTimestamp < Math.floor(user.passwordChangedAt.getTime() / 1000);
 };
 
 export default mongoose.model<IUser>("User", userSchema);

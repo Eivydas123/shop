@@ -1,8 +1,8 @@
-import AppError from "../utils/appError";
 import mongoose from "mongoose";
 import multer from "multer";
-import { Response, Request, NextFunction } from "express";
-const sendErrorDev = (err, res) => {
+import { Response, Request, NextFunction, ErrorRequestHandler } from "express";
+import AppError from "../utils/appError";
+const sendErrorDev = (err: AppError, res: Response) => {
   res.status(err.myStatusCode).json({
     status: err.myStatus,
     error: err,
@@ -11,7 +11,7 @@ const sendErrorDev = (err, res) => {
   });
 };
 
-const sendErrorProd = (err, res) => {
+const sendErrorProd = (err: AppError, res: Response) => {
   if (err.isOperational) {
     res.status(err.myStatusCode).json({
       status: err.myStatus,
@@ -33,7 +33,10 @@ const handleCastErrorDB = () => {
 const handleDuplicateError = () => {
   return new AppError(`Duplicate field values`, 409);
 };
-const handleValidationError = (error: { errors: object }, res: Response) => {
+const handleValidationError = (
+  error: mongoose.Error.ValidationError,
+  res: Response
+) => {
   const formattedError = Object.values(error.errors)
     .map((err: any) => ({
       message: err.message,
@@ -47,18 +50,17 @@ const handleJWTError = (res: Response) => {
   res.clearCookie("jwtAccessToken").clearCookie("jwtRefreshToken");
   return new AppError("Invalid token please log in again", 401);
 };
-const handleCSRFError = (error: { message: string }) => {
-  return new AppError(error.message, 403);
-};
-const handleMulterError = (error) => {
+const handleCSRFError = (error: { message: string }) =>
+  new AppError(error.message, 403);
+const handleMulterError = (error: Error) => {
   console.log(error);
   return new AppError(error.message, 400);
 };
 
-export default (err, req: Request, res: Response, next: NextFunction) => {
+export default (err: any, req: Request, res: Response, next: NextFunction) => {
   err.myStatusCode = err.myStatusCode || 500;
   err.myStatus = err.myStatus || "error";
-
+  console.log(err);
   if (process.env.NODE_ENV === "development") {
     sendErrorDev(err, res);
   } else if (process.env.NODE_ENV === "production") {

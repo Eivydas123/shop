@@ -3,4 +3,5 @@ export interface IJWT {
   id: string;
   remember: boolean;
   exp: number;
+  iat: number;
 }
